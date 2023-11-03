@@ -73,3 +73,7 @@ Arguments:
   face                  Path to the image with your face
   input_directory       Directory with .mp4 files. Default: `input`
 ```
+
+---
+
+Мой канал про нейрорнки на русском: https://t.me/neuronochka
