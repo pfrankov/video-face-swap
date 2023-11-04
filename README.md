@@ -76,4 +76,4 @@ Arguments:
 
 ---
 
-Мой канал про нейрорнки на русском: https://t.me/neuronochka
+Мой канал про нейронки на русском: https://t.me/neuronochka
