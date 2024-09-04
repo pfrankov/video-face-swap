@@ -25,7 +25,7 @@ MacBook Pro M1 — 29 frames — 48.5 seconds
 ```bash
 git clone git@github.com:pfrankov/video-face-swap.git
 cd video-face-swap
-python3 -m venv venv
+python3.10 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -42,7 +42,7 @@ source venv/bin/activate
 
 ### Single video
 ```bash
-python3 swap.py ./input/leonardo-dicaprio-rick-dalton.mp4 ./my_face.jpg result.mp4
+python swap.py ./input/leonardo-dicaprio-rick-dalton.mp4 ./my_face.jpg result.mp4
 ```
 ```text
 Usage:
