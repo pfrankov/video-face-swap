@@ -38,7 +38,7 @@ for input_file in "$input_dir"/*.mp4; do
     filename=$(basename -- "$input_file")
 
     # Run the swap.py command for each file
-    python3 swap.py "$input_file" "$my_face_image" "$output_dir/$filename"
+    python swap.py "$input_file" "$my_face_image" "$output_dir/$filename"
     echo "Processed: $input_file"
   fi
 done
