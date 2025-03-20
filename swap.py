@@ -48,10 +48,16 @@ app.prepare(ctx_id=0, det_size=(640, 640))
 
 # Load the source image
 source_img = cv2.imread(args.face)
+if source_img is None:
+    logging.error(f"Failed to load source image: {args.face}")
+    sys.exit(1)
 
 # Load the swapper model
 swapper = insightface.model_zoo.get_model(INSWAPPER_MODEL_CHECKPOINT, download=False, download_zip=False)
 source_faces = app.get(source_img)
+if not source_faces:
+    logging.error("No face detected in the source image")
+    sys.exit(1)
 
 
 def process_image(image_file_name):
@@ -75,10 +81,18 @@ def process_image(image_file_name):
 def video_to_images(video_file_path):
     list_files = []
     os.makedirs(VIDEO_FRAMES_DIRECTORY, exist_ok=True)
+    
+    # Get video information using MoviePy
+    video = mp.VideoFileClip(video_file_path)
+    original_fps = video.fps
+    original_duration = video.duration
+    video.close()
+    logging.info(f"Original video: FPS={original_fps}, Duration={original_duration}s")
+    
+    # Now extract frames using OpenCV
     cap = cv2.VideoCapture(video_file_path)
     frame_count = 0
-
-    original_fps = int(cap.get(cv2.CAP_PROP_FPS))
+    total_frames = 0
 
     frame_skip_ratio = 1
     real_frame_count = 0
@@ -86,7 +100,8 @@ def video_to_images(video_file_path):
         ret, frame = cap.read()
         if not ret:
             break
-
+        
+        total_frames += 1
         frame_count += 1
 
         if frame_count % frame_skip_ratio == 0:
@@ -96,13 +111,82 @@ def video_to_images(video_file_path):
             real_frame_count += 1
 
     cap.release()
+    
+    # The effective fps should be calculated based on the number of extracted frames and original duration
+    effective_fps = real_frame_count / original_duration if original_duration > 0 else original_fps
+    logging.info(f"Total frames in original video: {total_frames}")
+    logging.info(f"Extracted frames: {real_frame_count}")
+    logging.info(f"Effective FPS for output (frames/duration): {effective_fps}")
 
-    return list_files, original_fps
+    return list_files, effective_fps, original_duration
 
 
-def images_to_video(images_path, fps, output_file):
-    clip = mp.ImageSequenceClip(images_path, fps=fps)
-    clip.write_videofile(output_file, fps=fps)
+def extract_audio(video_path, output_path):
+    try:
+        video = mp.VideoFileClip(video_path)
+        audio = video.audio
+        if audio is not None:
+            logging.info(f"Extracting audio from {video_path} (duration: {video.duration}s)")
+            audio.write_audiofile(output_path)
+            audio_duration = audio.duration
+            audio.close()
+            video.close()
+            return True, audio_duration
+        else:
+            logging.warning(f"No audio stream found in {video_path}")
+        video.close()
+        return False, 0
+    except Exception as e:
+        logging.error(f"Error extracting audio: {str(e)}")
+        return False, 0
+
+
+def images_to_video(images_path, fps, output_file, source_video=None, original_duration=None):
+    try:
+        # Always use FPS calculated from number of frames and original duration
+        precise_fps = fps
+        logging.info(f"Using effective FPS for output: {precise_fps}")
+        
+        # Create clip with correct FPS
+        clip = mp.ImageSequenceClip(images_path, fps=precise_fps)
+        clip_duration = clip.duration
+        logging.info(f"Generated video clip duration: {clip_duration}s (FPS: {precise_fps})")
+        
+        # Check if output duration is close to original
+        if original_duration and abs(clip_duration - original_duration) > 1.0:
+            logging.warning(f"Output duration ({clip_duration}s) differs from original ({original_duration}s). This may cause sync issues.")
+        
+        if source_video:
+            temp_audio = "_tmp_audio.mp3"
+            has_audio, audio_duration = extract_audio(source_video, temp_audio)
+            
+            if has_audio:
+                try:
+                    audio = mp.AudioFileClip(temp_audio)
+                    logging.info(f"Audio duration: {audio_duration}s")
+                    
+                    # If audio is longer than video, trim it
+                    if audio.duration > clip.duration:
+                        logging.info(f"Trimming audio to match video duration ({clip.duration}s)")
+                        audio = audio.subclip(0, clip.duration)
+                    
+                    clip = clip.set_audio(audio)
+                    logging.info(f"Writing video with audio to {output_file} (FPS: {precise_fps})")
+                    clip.write_videofile(output_file, fps=precise_fps, audio_codec='aac')
+                    audio.close()
+                    os.remove(temp_audio)
+                    logging.info(f"Video with audio saved to {output_file}")
+                    return
+                except Exception as e:
+                    logging.error(f"Error processing audio: {str(e)}")
+        
+        # Fallback: write video without audio
+        logging.info(f"Writing video without audio (FPS: {precise_fps})")
+        clip.write_videofile(output_file, fps=precise_fps, audio=False)
+        
+    except Exception as e:
+        logging.error(f"Error in images_to_video: {str(e)}")
+        raise
 
 
 def get_images_list(directory):
@@ -128,8 +212,8 @@ if __name__ == "__main__":
     # Start splitting
     logging.info(f"Splitting video `{args.video}` to frames")
     timer_start = time.time()
-    frames, video_fps = video_to_images(args.video)
-    logging.info(f"Video FPS: {video_fps}")
+    frames, video_fps, original_duration = video_to_images(args.video)
+    logging.info(f"Video effective FPS: {video_fps}")
     logging.info(f"Total frames: {len(frames)}")
     logging.info(f"Splitting done in {time.time() - timer_start}s")
 
@@ -155,8 +239,11 @@ if __name__ == "__main__":
 
     processed_frames_images = [os.path.join(PROCESSED_FRAMES_DIRECTORY, file) for file in get_images_list(PROCESSED_FRAMES_DIRECTORY)]
     logging.info(f"Making video from {len(processed_frames_images)} images")
-    images_to_video(processed_frames_images, fps=video_fps,
-                    output_file=args.output)
+    images_to_video(processed_frames_images, 
+                  fps=video_fps,
+                  output_file=args.output, 
+                  source_video=args.video,
+                  original_duration=original_duration)
 
     remove_processed_frames_directory()
 

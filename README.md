@@ -12,7 +12,6 @@ MacBook Pro M1 — 29 frames — 48.5 seconds
 | <video src="https://github.com/pfrankov/video-face-swap/assets/584632/7f62786a-eaed-41ed-9ddd-7237e5b691a7"> | <video src="https://github.com/pfrankov/video-face-swap/assets/584632/9b33c763-4b0c-4aca-bec8-6ca08a61c365"> |
 
 ## Limitations
-- Intentionally no audio support.
 - Everything tested only on MacBook Pro (Apple M1, 16GB RAM)
 
 ## How it works
